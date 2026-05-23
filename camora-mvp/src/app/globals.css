@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+/* ── Base reset ── */
+* { box-sizing: border-box; }
+html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+body { background: #09090b; color: #f4f4f5; }
+
+/* ── Arabic typography ── */
+/* When the document is RTL, switch body font to Noto Sans Arabic.
+   IBM Plex Mono is kept for monospaced engineering values (Mbps, TB, GB)
+   because it renders numerals consistently in both directions.
+   Numbers and technical units always render LTR regardless of doc direction. */
+:root {
+  --font-arabic: "Noto Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+  --font-mono:   "IBM Plex Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+}
+
+[dir="rtl"] body {
+  font-family: var(--font-arabic);
+  /* Slightly larger line-height for Arabic — descenders need more breathing room */
+  line-height: 1.7;
+}
+
+/* Technical values (Mbps, TB, fps, %) are always LTR regardless of document direction */
+[dir="rtl"] .font-mono,
+[dir="rtl"] [class*="tabular-nums"] {
+  direction: ltr;
+  unicode-bidi: embed;
+  font-family: var(--font-mono);
+}
+
+/* Table cells containing numeric data stay LTR in RTL mode */
+[dir="rtl"] td.ltr-value,
+[dir="rtl"] span.ltr-value {
+  direction: ltr;
+  unicode-bidi: embed;
+  display: inline-block;
+}
+
+/* ── RTL form layout corrections ── */
+/* Select chevrons, input padding, and slider thumbs are handled by
+   the browser's logical-property support. We explicitly set text-align
+   for inputs so typed content aligns correctly. */
+[dir="rtl"] input,
+[dir="rtl"] select {
+  text-align: right;
+}
+
+[dir="rtl"] input[type="number"] {
+  /* Numbers should still display LTR inside the field */
+  direction: ltr;
+  text-align: left;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #52525b; }
+
+/* ── Number input spinner removal ── */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+input[type="number"] { -moz-appearance: textfield; }
+
+/* ── RTL-safe flex direction utilities ── */
+/* In RTL, "start" = right. Tailwind's flex-row respects the writing direction
+   when you use logical variants, but our custom components use explicit gap/margin.
+   We add a small override so icon+text sequences auto-reverse. */
+[dir="rtl"] .rtl-reverse {
+  flex-direction: row-reverse;
+}
