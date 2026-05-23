@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <rect width="32" height="32" rx="8" fill="#09090b"/>
+  <rect width="32" height="32" rx="8" fill="url(#grad)"/>
+  <text x="16" y="22" font-family="system-ui,sans-serif" font-weight="700" font-size="18" fill="#22d3ee" text-anchor="middle">C</text>
+  <defs>
+    <linearGradient id="grad" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#083344"/>
+      <stop offset="100%" stop-color="#09090b"/>
+    </linearGradient>
+  </defs>
+</svg>
