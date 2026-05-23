@@ -297,8 +297,8 @@ export function CameraRow({ row, index, totalRows, onUpdate, onRemove, onDuplica
               options={VENDOR_OPTIONS.map(o => ({ value: o.value, label: o.label }))} />
 
             <Select label={t.model} value={row.modelId ?? ""}
-              onChange={v => onUpdate({ modelId: v || null })}
-              options={[{ value: "", label: dict.cameraRow.genericFormula }, ...modelOptions]}
+              onChange={v => onUpdate({ modelId: v === "generic" ? null : v })}
+              options={[{ value: "generic", label: dict.cameraRow.genericFormula }, ...modelOptions]}
               disabled={modelOptions.length === 0} />
 
             <Select label={t.resolution} value={row.resolution}
