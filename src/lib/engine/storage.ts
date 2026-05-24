@@ -130,16 +130,17 @@ export interface HDDRecommendationInput {
   readonly maxRetentionDays:         number;
   readonly conservativeMode:         boolean;
   readonly storageOverheadMultiplier: number;
+  readonly raidOverride?:            RAIDProfile;
 }
 
 export function recommendHDD(input: HDDRecommendationInput): HDDRecommendation {
-  const { cameraResults, totalCameras, maxRetentionDays, conservativeMode, storageOverheadMultiplier } = input;
+  const { cameraResults, totalCameras, maxRetentionDays, conservativeMode, storageOverheadMultiplier, raidOverride } = input;
 
   const rawTotalTB             = cameraResults.reduce((sum, r) => sum + r.groupStorageRetentionTB, 0);
   const requiredWithOverheadTB = rawTotalTB * storageOverheadMultiplier;
   const warnings: string[]     = [];
 
-  const raidProfile                    = selectRAIDProfile(totalCameras, maxRetentionDays, conservativeMode);
+  const raidProfile = raidOverride ?? selectRAIDProfile(totalCameras, maxRetentionDays, conservativeMode);
   const { driveCapacityTB, driveCount } = sizeDrives(requiredWithOverheadTB, raidProfile);
 
   const grossCapacityTB  = driveCount * driveCapacityTB;

@@ -28,6 +28,7 @@ interface UseCalculatorReturn {
   duplicateRow:          (rowId: string) => void;
   setConservativeMode:   (v: boolean) => void;
   setOverheadMultiplier: (v: number) => void;
+  setRaidOverride:       (v: CalculatorFormState['raidOverride']) => void;
 }
 
 export function useCalculator(): UseCalculatorReturn {
@@ -35,6 +36,7 @@ export function useCalculator(): UseCalculatorReturn {
     rows:                     [makeDefaultRow()],
     conservativeMode:          false,
     storageOverheadMultiplier: 1.20,
+    raidOverride:              'auto',
   });
 
   const { result, error } = useMemo(() => {
@@ -42,6 +44,7 @@ export function useCalculator(): UseCalculatorReturn {
       const r = calculate(state.rows, {
         conservativeMode:          state.conservativeMode,
         storageOverheadMultiplier: state.storageOverheadMultiplier,
+        raidOverride:              state.raidOverride !== 'auto' ? state.raidOverride : undefined,
       });
       return { result: r, error: null };
     } catch (e) {
@@ -84,5 +87,9 @@ export function useCalculator(): UseCalculatorReturn {
     setState((prev) => ({ ...prev, storageOverheadMultiplier: v }));
   }, []);
 
-  return { state, result, error, addRow, removeRow, updateRow, duplicateRow, setConservativeMode, setOverheadMultiplier };
+  const setRaidOverride = useCallback((v: CalculatorFormState['raidOverride']) => {
+    setState((prev) => ({ ...prev, raidOverride: v }));
+  }, []);
+
+  return { state, result, error, addRow, removeRow, updateRow, duplicateRow, setConservativeMode, setOverheadMultiplier, setRaidOverride };
 }

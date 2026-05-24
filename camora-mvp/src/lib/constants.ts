@@ -129,4 +129,5 @@ export const DEFAULT_CAMERA_CONFIG = {
   audioCodec:           null,
   aiAnalyticsEnabled:   false,
   aiAnalyticsMode:      null,
+  radioType:            'wired',
 } as const;

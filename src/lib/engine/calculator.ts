@@ -36,6 +36,7 @@ export function calculate(
     maxRetentionDays,
     conservativeMode:         opts.conservativeMode,
     storageOverheadMultiplier: opts.storageOverheadMultiplier,
+    raidOverride:             opts.raidOverride,
   });
 
   const nvr       = calculateNVRThroughput(cameraResults);

@@ -65,6 +65,12 @@ export type SceneComplexity = 'minimal' | 'low' | 'medium' | 'high' | 'extreme';
  * cloud_relay    — full frames relayed to cloud for inference
  * hybrid         — edge pre-filter + selective cloud relay
  */
+export type RadioType =
+  | 'wired'    // 802.3af/at PoE — baseline, most reliable
+  | 'wifi'     // Wi-Fi — +15% storage overhead (packet loss, reconnects)
+  | '4g5g'     // 4G/5G cellular — +25% overhead (variable latency, buffering)
+  | 'mesh';    // Mesh/P2P — +20% overhead (multi-hop, retransmissions)
+
 export type AIAnalyticsMode =
   | 'edge_metadata'
   | 'edge_full'
@@ -126,6 +132,9 @@ export interface CameraConfig {
   // AI analytics
   aiAnalyticsEnabled: boolean;
   aiAnalyticsMode: AIAnalyticsMode | null;
+
+  // Network / radio type
+  radioType: RadioType;
 }
 
 // ── Engine options ────────────────────────────────────────────────────────────
@@ -148,6 +157,13 @@ export interface EngineOptions {
    * and forces RAID6 as the minimum RAID profile.
    */
   conservativeMode?: boolean;
+
+  /**
+   * Manual RAID profile override. When set, the engine uses this profile
+   * instead of auto-selecting based on camera count and retention.
+   * Leave undefined for automatic selection.
+   */
+  raidOverride?: RAIDProfile;
 }
 
 // ── Per-camera result ─────────────────────────────────────────────────────────

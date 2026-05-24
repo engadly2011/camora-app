@@ -24,7 +24,7 @@ import { mbpsToGB, gbToTB, SECONDS_PER_HOUR } from '@/lib/engine/units';
 // Engine defaults
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const DEFAULT_OPTIONS: Required<EngineOptions> = {
+export const DEFAULT_OPTIONS: Omit<Required<EngineOptions>, 'raidOverride'> & { raidOverride?: import('./types.js').RAIDProfile } = {
   storageOverheadMultiplier: 1.20,
   peakToAverageRatio:        1.50,
   conservativeMode:          false,
@@ -213,6 +213,22 @@ function validateConfig(config: CameraConfig): string[] {
 // Main entry points
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── Radio type overhead ───────────────────────────────────────────────────────
+// Different network types introduce packet loss, buffering, and retransmission
+// overhead that increases effective storage requirements.
+const RADIO_OVERHEAD: Record<string, number> = {
+  wired: 1.00,  // baseline — PoE 802.3af/at
+  wifi:  1.15,  // +15% — Wi-Fi packet loss & reconnection buffering
+  '4g5g': 1.25, // +25% — cellular variable latency & stream buffering
+  mesh:  1.20,  // +20% — multi-hop retransmission overhead
+};
+
+export function radioOverheadFactor(radioType: string): number {
+  return RADIO_OVERHEAD[radioType] ?? 1.00;
+}
+
+
+
 export function calculateCamera(config: CameraConfig, options: EngineOptions = {}): CameraResult {
   const opts     = { ...DEFAULT_OPTIONS, ...options };
   const warnings = validateConfig(config);
@@ -238,8 +254,14 @@ export function calculateCamera(config: CameraConfig, options: EngineOptions = {
   // Stage 5: additive deltas
   const audioBitrateMbps = resolveAudioBitrate(config);
   const aiOverheadMbps   = resolveAIOverhead(config);
-  const effectiveBitrateMbps = motionAdjustedBitrateMbps + audioBitrateMbps + aiOverheadMbps;
-  const peakBitrateMbps      = peakMbps                  + audioBitrateMbps + aiOverheadMbps;
+  // Stage 6: radio/network overhead
+  const radioFactor = radioOverheadFactor(config.radioType ?? 'wired');
+  const effectiveBitrateMbps = (motionAdjustedBitrateMbps + audioBitrateMbps + aiOverheadMbps) * radioFactor;
+  const peakBitrateMbps      = (peakMbps                  + audioBitrateMbps + aiOverheadMbps) * radioFactor;
+  if (radioFactor > 1.00) {
+    const pct = Math.round((radioFactor - 1) * 100);
+    warnings.push(`Radio type (${config.radioType}) adds ${pct}% storage overhead for packet loss & buffering.`);
+  }
 
   // Duty cycle and storage
   const { dutyCycleRatio, activeHoursPerDay } = resolveRecordingDutyCycle(config);
