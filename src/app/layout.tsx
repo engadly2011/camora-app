@@ -3,7 +3,8 @@ import { LocaleProvider } from "@/i18n/LocaleContext";
 import "./globals.css";
 
 // ─── Base URL ─────────────────────────────────────────────────────────────────
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "https://camora.app";
+const BASE_URL        = process.env.NEXT_PUBLIC_BASE_URL ?? "https://camora.app";
+const PLAUSIBLE_DOMAIN = process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN ?? "";
 
 // ─── SEO + Open Graph metadata ────────────────────────────────────────────────
 export const metadata: Metadata = {
@@ -96,6 +97,29 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link
           href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
           rel="stylesheet"
+        />
+        {PLAUSIBLE_DOMAIN && (
+          <script
+            defer
+            data-domain={PLAUSIBLE_DOMAIN}
+            src="https://plausible.io/js/script.js"
+          />
+        )}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "SoftwareApplication",
+              "name": "Camora",
+              "description": "Free CCTV storage, bandwidth, NVR throughput, and RAID calculator for surveillance engineers.",
+              "url": BASE_URL,
+              "applicationCategory": "UtilitiesApplication",
+              "operatingSystem": "Web",
+              "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+              "inLanguage": ["en", "ar"],
+            })
+          }}
         />
       </head>
       <body className="min-h-screen bg-zinc-950 text-zinc-100 antialiased">

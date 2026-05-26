@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { calculate } from "@/lib/engine";
 import type { SystemResult, CameraConfig } from "@/lib/engine";
 import type { CameraRow, CalculatorFormState } from "@/types/calculator";
 import { DEFAULT_CAMERA_CONFIG } from "@/lib/constants";
+import { decodeParamsToState, encodeStateToParams } from "@/lib/shareUrl";
 
 export function generateRowId(): string {
   return `row-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -32,12 +33,28 @@ interface UseCalculatorReturn {
 }
 
 export function useCalculator(): UseCalculatorReturn {
-  const [state, setState] = useState<CalculatorFormState>({
-    rows:                     [makeDefaultRow()],
-    conservativeMode:          false,
-    storageOverheadMultiplier: 1.20,
-    raidOverride:              'auto',
+  // Initialise state from URL params if present, else defaults
+  const [state, setState] = useState<CalculatorFormState>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = decodeParamsToState(params, makeDefaultRow);
+      if (fromUrl) return fromUrl;
+    }
+    return {
+      rows:                     [makeDefaultRow()],
+      conservativeMode:          false,
+      storageOverheadMultiplier: 1.20,
+      raidOverride:              'auto',
+    };
   });
+
+  // Sync state → URL whenever state changes (replaceState, no history push)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = encodeStateToParams(state);
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState(null, '', newUrl);
+  }, [state]);
 
   const { result, error } = useMemo(() => {
     try {

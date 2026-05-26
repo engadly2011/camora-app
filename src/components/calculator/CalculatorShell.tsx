@@ -3,10 +3,9 @@
 import { useState, useMemo } from "react";
 import {
   FileDown, Languages, Plus, Trash2,
-  ChevronDown, ChevronUp, Settings2, Zap, Info, Cpu,
+  ChevronDown, ChevronUp, Settings2, Link, Check,
 } from "lucide-react";
-import { generateRecommendation } from "@/lib/engine";
-import type { CameraConfig, RAIDProfile } from "@/lib/engine";
+import type { CameraConfig } from "@/lib/engine";
 import { useCalculator }    from "@/hooks/useCalculator";
 import { useLocale }        from "@/i18n/LocaleContext";
 import { usePdfExport }     from "@/lib/pdf/export";
@@ -14,6 +13,8 @@ import { ExportModal }      from "./ExportModal";
 import { ResultsPanel }     from "./ResultsPanel";
 import { cn }               from "@/lib/utils";
 import { SCENARIO_PRESETS } from "@/lib/presets";
+import { buildShareUrl }    from "@/lib/shareUrl";
+import { analytics }        from "@/lib/analytics";
 import { RESOLUTION_OPTIONS, CODEC_OPTIONS, VENDOR_OPTIONS } from "@/lib/constants";
 import type { CalculatorFormState } from "@/types/calculator";
 
@@ -68,22 +69,28 @@ export function CalculatorShell() {
     [state.rows]
   );
 
-  const recommendation = useMemo(() => {
-    if (!result) return null;
-    try { return generateRecommendation({ result, configs }); }
-    catch { return null; }
-  }, [result, configs]);
-
   const { exportState, exportError, exportPdf, reset } = usePdfExport({ result, configs });
-  const [exportOpen,  setExportOpen]  = useState(false);
+  const [exportOpen,   setExportOpen]   = useState(false);
   const [activePreset, setActivePreset] = useState<string | null>(null);
+  const [mobileTab,    setMobileTab]    = useState<'config' | 'results'>('config');
 
-  function handleExport() { if (!result) return; reset(); setExportOpen(true); }
+  function handleExport() { if (!result) return; reset(); analytics.pdfExportStarted(); setExportOpen(true); }
+
+  const [copied, setCopied] = useState(false);
+  function handleCopyLink() {
+    const url = buildShareUrl(state);
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      analytics.shareLinkCopied();
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   function applyPreset(presetId: string) {
     const preset = SCENARIO_PRESETS.find(p => p.id === presetId);
     if (!preset) return;
     setActivePreset(presetId);
+    analytics.presetSelected(presetId);
     const patch: Partial<CameraConfig> = {};
     if (preset.motionPercent       !== undefined) patch.motionPercent       = preset.motionPercent;
     if (preset.sceneComplexity     !== undefined) patch.sceneComplexity     = preset.sceneComplexity;
@@ -121,6 +128,13 @@ export function CalculatorShell() {
               className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-colors">
               {dict.header.langToggle}
             </button>
+            <button onClick={handleCopyLink}
+              className="hidden sm:flex items-center gap-1.5 rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-400 hover:border-cyan-700/60 hover:text-cyan-400 transition-colors">
+              {copied
+                ? <><Check className="h-3.5 w-3.5 text-emerald-400" /><span className="text-emerald-400">Copied!</span></>
+                : <><Link className="h-3.5 w-3.5" />Share Link</>
+              }
+            </button>
             <button onClick={handleExport} disabled={!result}
               className={cn(
                 "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
@@ -135,11 +149,36 @@ export function CalculatorShell() {
         </div>
       </nav>
 
+      {/* ── Mobile tab bar — only on screens < lg ── */}
+      <div className="sticky top-14 z-10 border-b border-zinc-800 bg-[#0a0f1a] lg:hidden">
+        <div className="flex">
+          {(['config', 'results'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setMobileTab(tab)}
+              className={cn(
+                "flex-1 py-3 text-sm font-semibold capitalize transition-colors",
+                mobileTab === tab
+                  ? "border-b-2 border-cyan-500 text-cyan-400"
+                  : "text-zinc-500 hover:text-zinc-300"
+              )}
+            >
+              {tab === 'config' ? '⚙ Configure' : '📊 Results'}
+              {tab === 'results' && result && (
+                <span className="ml-1.5 font-mono text-xs text-zinc-500">
+                  {result.rawStorageTB.toFixed(1)} TB
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* ── Body ── */}
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:flex lg:gap-6">
 
-        {/* ── LEFT: Config ── */}
-        <div className="flex-1 space-y-4 lg:max-w-[640px]">
+        {/* ── LEFT: Config — hidden on mobile when results tab active ── */}
+        <div className={cn("flex-1 space-y-4 lg:max-w-[640px]", mobileTab === 'results' ? "hidden lg:block" : "block")}>
 
           {/* ── STEP 1: Scenario ── */}
           <StepCard step={1} title="Select Scenario">
@@ -332,8 +371,8 @@ export function CalculatorShell() {
 
         </div>
 
-        {/* ── RIGHT: Results ── */}
-        <div className="mt-4 lg:mt-0 lg:w-[460px] lg:shrink-0">
+        {/* ── RIGHT: Results — hidden on mobile when config tab active ── */}
+        <div className={cn("mt-4 lg:mt-0 lg:w-[460px] lg:shrink-0", mobileTab === 'config' ? "hidden lg:block" : "block")}>
           <div className="sticky top-20">
             {error ? (
               <div className="rounded-xl border border-red-800/40 bg-red-950/20 p-4 text-sm text-red-400">{error}</div>
@@ -406,7 +445,7 @@ function AdvancedSection({ label, children }: { label: string; children: React.R
   const [open, setOpen] = useState(false);
   return (
     <div className="mt-4 rounded-xl border border-zinc-800 overflow-hidden">
-      <button onClick={() => setOpen(v => !v)}
+      <button onClick={() => { if (!open) analytics.advancedOptionsOpened(); setOpen(v => !v); }}
         className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/30 transition-colors">
         <div className="flex items-center gap-2">
           <Settings2 className="h-3.5 w-3.5 text-zinc-500" />

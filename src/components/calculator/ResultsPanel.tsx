@@ -49,12 +49,6 @@ export function ResultsPanel({ result, configs, onExport }: ResultsPanelProps) {
   return (
     <div className="space-y-3">
 
-      {/* Results / Recommendations tabs */}
-      <div className="flex rounded-xl border border-zinc-800 bg-zinc-900/60 p-1">
-        <button className="flex-1 rounded-lg py-2 text-xs font-semibold text-zinc-100 bg-zinc-800">Results</button>
-        <button className="flex-1 rounded-lg py-2 text-xs font-medium text-zinc-500 hover:text-zinc-300 transition-colors">Recommendations</button>
-      </div>
-
       {/* ── Engineering Confidence ── */}
       {confidence && cp && (
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
