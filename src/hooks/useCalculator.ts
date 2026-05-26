@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { calculate } from "@/lib/engine";
 import type { SystemResult, CameraConfig } from "@/lib/engine";
-import type { CameraRow, CalculatorFormState } from "@/types/calculator";
+import type { CameraRow, CalculatorFormState, ManualStorageConfig } from "@/types/calculator";
 import { DEFAULT_CAMERA_CONFIG } from "@/lib/constants";
 import { decodeParamsToState, encodeStateToParams } from "@/lib/shareUrl";
 
@@ -30,6 +30,8 @@ interface UseCalculatorReturn {
   setConservativeMode:   (v: boolean) => void;
   setOverheadMultiplier: (v: number) => void;
   setRaidOverride:       (v: CalculatorFormState['raidOverride']) => void;
+  setStorageMode:        (v: CalculatorFormState['storageMode']) => void;
+  setManualStorage:      (v: Partial<ManualStorageConfig>) => void;
 }
 
 export function useCalculator(): UseCalculatorReturn {
@@ -45,6 +47,12 @@ export function useCalculator(): UseCalculatorReturn {
       conservativeMode:          false,
       storageOverheadMultiplier: 1.20,
       raidOverride:              'auto',
+      storageMode:               'auto',
+      manualStorage: {
+        raidProfile:     'RAID5',
+        driveCount:      6,
+        driveCapacityTB: 8,
+      },
     };
   });
 
@@ -108,5 +116,13 @@ export function useCalculator(): UseCalculatorReturn {
     setState((prev) => ({ ...prev, raidOverride: v }));
   }, []);
 
-  return { state, result, error, addRow, removeRow, updateRow, duplicateRow, setConservativeMode, setOverheadMultiplier, setRaidOverride };
+  const setStorageMode = useCallback((v: CalculatorFormState['storageMode']) => {
+    setState((prev) => ({ ...prev, storageMode: v }));
+  }, []);
+
+  const setManualStorage = useCallback((v: Partial<ManualStorageConfig>) => {
+    setState((prev) => ({ ...prev, manualStorage: { ...prev.manualStorage, ...v } }));
+  }, []);
+
+  return { state, result, error, addRow, removeRow, updateRow, duplicateRow, setConservativeMode, setOverheadMultiplier, setRaidOverride, setStorageMode, setManualStorage };
 }

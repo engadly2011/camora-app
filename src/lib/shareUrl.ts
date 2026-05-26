@@ -154,6 +154,12 @@ export function decodeParamsToState(
     conservativeMode:          false,
     storageOverheadMultiplier: 1 + overheadPct / 100,
     raidOverride:              raidOverride as RAIDProfile | 'auto',
+    storageMode:               'auto' as const,
+    manualStorage: {
+      raidProfile:     'RAID5' as RAIDProfile,
+      driveCount:      6,
+      driveCapacityTB: 8,
+    },
   };
 }
 

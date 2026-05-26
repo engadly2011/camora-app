@@ -12,11 +12,12 @@ import { usePdfExport }     from "@/lib/pdf/export";
 import { ExportModal }      from "./ExportModal";
 import { ResultsPanel }     from "./ResultsPanel";
 import { cn }               from "@/lib/utils";
-import { SCENARIO_PRESETS } from "@/lib/presets";
+import { SCENARIO_PRESETS }   from "@/lib/presets";
+import { planRealisticStorage, selectRealisticRAID, evaluateManualStorage } from "@/lib/engine/storagePlanner";
 import { buildShareUrl }    from "@/lib/shareUrl";
 import { analytics }        from "@/lib/analytics";
 import { RESOLUTION_OPTIONS, CODEC_OPTIONS, VENDOR_OPTIONS } from "@/lib/constants";
-import type { CalculatorFormState } from "@/types/calculator";
+import type { CalculatorFormState, ManualStorageConfig } from "@/types/calculator";
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 
@@ -59,7 +60,7 @@ export function CalculatorShell() {
   const {
     state, result, error,
     addRow, removeRow, updateRow,
-    setOverheadMultiplier, setRaidOverride,
+    setOverheadMultiplier, setRaidOverride, setStorageMode, setManualStorage,
   } = useCalculator();
 
   const { dict, toggleLocale } = useLocale();
@@ -342,35 +343,13 @@ export function CalculatorShell() {
 
           {/* ── STEP 4: Storage ── */}
           <StepCard step={4} title="Storage System">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <FieldGroup label="RAID Level">
-                <Sel value={state.raidOverride ?? "auto"}
-                  onChange={v => setRaidOverride(v as CalculatorFormState["raidOverride"])}
-                  options={RAID_OPTIONS.map(o => ({ value: o.value, label: o.label }))} />
-                <div className="mt-1 text-[11px] text-zinc-600">
-                  {RAID_OPTIONS.find(r => r.value === (state.raidOverride ?? "auto"))?.note}
-                </div>
-              </FieldGroup>
-
-              <FieldGroup label="Storage Overhead">
-                <div className="flex gap-1">
-                  {[10, 15, 20, 25, 30].map(v => (
-                    <button key={v} onClick={() => setOverheadMultiplier(1 + v / 100)}
-                      className={cn(
-                        "flex-1 rounded-lg py-2 text-xs font-mono font-medium transition-colors",
-                        Math.round((state.storageOverheadMultiplier - 1) * 100) === v
-                          ? "bg-cyan-600 text-zinc-950 font-bold"
-                          : "border border-zinc-700 bg-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
-                      )}>
-                      {v}%
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-1 text-[11px] text-zinc-600">
-                  System + safety margin
-                </div>
-              </FieldGroup>
-            </div>
+            <StoragePlannerSection
+              state={state}
+              result={result}
+              setStorageMode={setStorageMode}
+              setManualStorage={setManualStorage}
+              setOverheadMultiplier={setOverheadMultiplier}
+            />
           </StepCard>
 
         </div>
@@ -540,6 +519,247 @@ function CameraGroupRow({ row, totalRows, estimatedMbps, onUpdate, onRemove }: {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Storage Planner Section ─────────────────────────────────────────────────
+
+const DRIVE_SIZES_TB = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20] as const;
+const RAID_PROFILES  = ['RAID1', 'RAID5', 'RAID6', 'RAID10', 'JBOD'] as const;
+
+function StoragePlannerSection({ state, result, setStorageMode, setManualStorage, setOverheadMultiplier }: {
+  state:                CalculatorFormState;
+  result:               import("@/lib/engine").SystemResult | null;
+  setStorageMode:       (v: CalculatorFormState['storageMode']) => void;
+  setManualStorage:     (v: Partial<ManualStorageConfig>) => void;
+  setOverheadMultiplier: (v: number) => void;
+}) {
+  const isManual  = state.storageMode === 'manual';
+  const rawTB     = result?.rawStorageTB ?? 0;
+  const configs   = result ? undefined : undefined; // result already has hdd
+
+  // Auto recommendation via realistic planner
+  const autoRAID = result
+    ? selectRealisticRAID(
+        result.totalCameraCount,
+        Math.max(...state.rows.map(r => r.retentionDays).concat([30])),
+        rawTB,
+        state.conservativeMode,
+      )
+    : 'RAID5' as const;
+
+  const autoPlan = rawTB > 0
+    ? planRealisticStorage(rawTB * state.storageOverheadMultiplier, autoRAID)
+    : null;
+
+  // Manual evaluation
+  const manualEval = rawTB > 0 && isManual
+    ? evaluateManualStorage({
+        driveCount:      state.manualStorage.driveCount,
+        driveCapacityTB: state.manualStorage.driveCapacityTB,
+        raidProfile:     state.manualStorage.raidProfile,
+        requiredRawTB:   rawTB * state.storageOverheadMultiplier,
+      })
+    : null;
+
+  return (
+    <div className="space-y-4">
+      {/* Mode toggle */}
+      <div className="flex items-center justify-between">
+        <span className="field-label">Storage Configuration</span>
+        <div className="flex rounded-md border border-zinc-700 bg-zinc-900 p-0.5 text-[11px] font-medium">
+          <button
+            onClick={() => setStorageMode('auto')}
+            className={cn(
+              "rounded px-3 py-1.5 transition-colors",
+              !isManual ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"
+            )}
+          >
+            Auto
+          </button>
+          <button
+            onClick={() => setStorageMode('manual')}
+            className={cn(
+              "rounded px-3 py-1.5 transition-colors",
+              isManual ? "bg-amber-600 text-zinc-950 font-semibold" : "text-zinc-500 hover:text-zinc-300"
+            )}
+          >
+            Manual
+          </button>
+        </div>
+      </div>
+
+      {/* Storage Overhead buttons — always visible */}
+      <FieldGroup label="Storage Overhead">
+        <div className="flex gap-1">
+          {[10, 15, 20, 25, 30].map(v => (
+            <button key={v} onClick={() => setOverheadMultiplier(1 + v / 100)}
+              className={cn(
+                "flex-1 rounded-lg py-2 text-xs font-mono font-medium transition-colors",
+                Math.round((state.storageOverheadMultiplier - 1) * 100) === v
+                  ? "bg-cyan-600 text-zinc-950 font-bold"
+                  : "border border-zinc-700 bg-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
+              )}>
+              {v}%
+            </button>
+          ))}
+        </div>
+        <div className="mt-1 text-[11px] text-zinc-600">Filesystem + safety margin</div>
+      </FieldGroup>
+
+      {/* ── AUTO: show recommendation ── */}
+      {!isManual && autoPlan && (
+        <div className="rounded-xl border border-cyan-800/30 bg-cyan-950/15 p-4 space-y-3">
+          {/* Primary recommendation */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-baseline gap-1.5" style={{direction:"ltr",unicodeBidi:"embed"}}>
+              <span className="font-mono text-3xl font-bold text-zinc-100">{autoPlan.driveCount}</span>
+              <span className="text-zinc-500">×</span>
+              <span className="font-mono text-3xl font-bold text-cyan-300">{autoPlan.driveCapacityTB} TB</span>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="rounded-md border border-cyan-700/40 bg-cyan-950/30 px-2 py-0.5 text-xs font-bold text-cyan-400">
+                {autoPlan.raidProfile}
+              </span>
+              {autoPlan.isPreferredBay && (
+                <span className="text-[10px] text-zinc-500">{autoPlan.bayCount}-bay chassis</span>
+              )}
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-2 py-2">
+              <div className="text-[10px] text-zinc-600 mb-0.5">Usable</div>
+              <div className="font-mono text-sm font-bold text-zinc-200"
+                style={{direction:"ltr",unicodeBidi:"embed"}}>
+                {autoPlan.usableCapacityTB} TB
+              </div>
+            </div>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-2 py-2">
+              <div className="text-[10px] text-zinc-600 mb-0.5">Utilization</div>
+              <div className={cn(
+                "font-mono text-sm font-bold",
+                autoPlan.utilizationPct > 85 ? "text-amber-400" : "text-emerald-400"
+              )} style={{direction:"ltr",unicodeBidi:"embed"}}>
+                {autoPlan.utilizationPct}%
+              </div>
+            </div>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-2 py-2">
+              <div className="text-[10px] text-zinc-600 mb-0.5">Surplus</div>
+              <div className="font-mono text-sm font-bold text-zinc-400"
+                style={{direction:"ltr",unicodeBidi:"embed"}}>
+                +{autoPlan.surplusTB} TB
+              </div>
+            </div>
+          </div>
+
+          {/* Rationale */}
+          <div className="flex items-start gap-2 text-[11px] text-zinc-500">
+            <span className="shrink-0 text-cyan-600 mt-0.5">ℹ</span>
+            <span>{autoPlan.rationale}</span>
+          </div>
+        </div>
+      )}
+
+      {!isManual && !autoPlan && (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 text-center text-sm text-zinc-600">
+          Add cameras to see storage recommendation
+        </div>
+      )}
+
+      {/* ── MANUAL: editable inputs + validation ── */}
+      {isManual && (
+        <div className={cn(
+          "rounded-xl border p-4 space-y-4",
+          manualEval && !manualEval.isValid
+            ? "border-red-800/40 bg-red-950/10"
+            : "border-amber-700/30 bg-amber-950/10"
+        )}>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <FieldGroup label="RAID Level">
+              <Sel
+                value={state.manualStorage.raidProfile}
+                onChange={v => setManualStorage({ raidProfile: v as import("@/lib/engine").RAIDProfile })}
+                options={RAID_PROFILES.map(r => ({
+                  value: r,
+                  label: r === 'JBOD' ? 'JBOD (No RAID)' : r,
+                }))}
+              />
+            </FieldGroup>
+
+            <FieldGroup label="Drive Count">
+              <input
+                type="number"
+                value={state.manualStorage.driveCount}
+                min={1} max={24}
+                onChange={e => setManualStorage({ driveCount: Math.min(24, Math.max(1, parseInt(e.target.value) || 1)) })}
+                className="h-9 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 text-center font-mono text-sm text-zinc-100 focus:border-amber-500 focus:outline-none"
+              />
+            </FieldGroup>
+
+            <FieldGroup label="Drive Size">
+              <Sel
+                value={String(state.manualStorage.driveCapacityTB)}
+                onChange={v => setManualStorage({ driveCapacityTB: parseInt(v) })}
+                options={DRIVE_SIZES_TB.map(s => ({ value: String(s), label: `${s} TB` }))}
+              />
+            </FieldGroup>
+          </div>
+
+          {/* Manual evaluation results */}
+          {manualEval && (
+            <>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-2 py-2">
+                  <div className="text-[10px] text-zinc-600 mb-0.5">Usable</div>
+                  <div className="font-mono text-sm font-bold text-zinc-200"
+                    style={{direction:"ltr",unicodeBidi:"embed"}}>
+                    {manualEval.usableCapacityTB} TB
+                  </div>
+                </div>
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-2 py-2">
+                  <div className="text-[10px] text-zinc-600 mb-0.5">Utilization</div>
+                  <div className={cn(
+                    "font-mono text-sm font-bold",
+                    manualEval.utilizationPct > 90 ? "text-red-400" :
+                    manualEval.utilizationPct > 75 ? "text-amber-400" : "text-emerald-400"
+                  )} style={{direction:"ltr",unicodeBidi:"embed"}}>
+                    {manualEval.utilizationPct}%
+                  </div>
+                </div>
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-2 py-2">
+                  <div className="text-[10px] text-zinc-600 mb-0.5">Surplus</div>
+                  <div className={cn(
+                    "font-mono text-sm font-bold",
+                    manualEval.surplusTB < 0 ? "text-red-400" : "text-zinc-400"
+                  )} style={{direction:"ltr",unicodeBidi:"embed"}}>
+                    {manualEval.surplusTB >= 0 ? '+' : ''}{manualEval.surplusTB} TB
+                  </div>
+                </div>
+              </div>
+
+              {/* Validation warnings */}
+              {manualEval.warnings.length > 0 && (
+                <div className="space-y-1.5">
+                  {manualEval.warnings.map((w, i) => (
+                    <div key={i} className={cn(
+                      "flex items-start gap-2 rounded-lg px-3 py-2 text-[11px]",
+                      manualEval.isValid
+                        ? "border border-amber-700/30 bg-amber-950/20 text-amber-400"
+                        : "border border-red-700/30 bg-red-950/20 text-red-400"
+                    )}>
+                      <span className="shrink-0">{manualEval.isValid ? "⚠" : "⛔"}</span>
+                      <span>{w}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
