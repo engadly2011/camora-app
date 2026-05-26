@@ -208,15 +208,19 @@ export function CalculatorShell() {
             </div>
 
             <div className="space-y-2">
-              {state.rows.map(row => (
-                <CameraGroupRow
-                  key={row._rowId}
-                  row={row}
-                  totalRows={state.rows.length}
-                  onUpdate={patch => updateRow(row._rowId, patch)}
-                  onRemove={() => removeRow(row._rowId)}
-                />
-              ))}
+              {state.rows.map((row, idx) => {
+                const cam = result?.cameras[idx];
+                return (
+                  <CameraGroupRow
+                    key={row._rowId}
+                    row={row}
+                    totalRows={state.rows.length}
+                    estimatedMbps={cam?.effectiveBitrateMbps ?? null}
+                    onUpdate={patch => updateRow(row._rowId, patch)}
+                    onRemove={() => removeRow(row._rowId)}
+                  />
+                );
+              })}
             </div>
 
             <button onClick={addRow}
@@ -400,41 +404,142 @@ export function CalculatorShell() {
 
 // ─── Camera Group Row ─────────────────────────────────────────────────────────
 
-function CameraGroupRow({ row, totalRows, onUpdate, onRemove }: {
-  row:       import("@/types/calculator").CameraRow;
-  totalRows: number;
-  onUpdate:  (p: Partial<CameraConfig>) => void;
-  onRemove:  () => void;
+function CameraGroupRow({ row, totalRows, estimatedMbps, onUpdate, onRemove }: {
+  row:           import("@/types/calculator").CameraRow;
+  totalRows:     number;
+  estimatedMbps: number | null;
+  onUpdate:      (p: Partial<CameraConfig>) => void;
+  onRemove:      () => void;
 }) {
+  const isManual = row.encodingMode === "CBR" && row.targetBitrateMbps !== null;
+  const manualVal = row.targetBitrateMbps ?? 4;
+
+  // Validation for manual bitrate
+  const isTooHigh = isManual && manualVal > 50;
+  const isTooLow  = isManual && manualVal <= 0;
+  const isValid   = isManual && !isTooHigh && !isTooLow;
+
+  function enableManual() {
+    const seed = estimatedMbps ? parseFloat(estimatedMbps.toFixed(2)) : 4;
+    onUpdate({ encodingMode: "CBR", targetBitrateMbps: seed });
+  }
+
+  function disableManual() {
+    onUpdate({ encodingMode: "VBR", targetBitrateMbps: null });
+  }
+
   return (
-    <div className="grid grid-cols-[1.5fr_1fr_70px_70px_36px] gap-2 items-center rounded-xl border border-zinc-800 bg-zinc-900/50 p-3">
-      {/* Vendor */}
-      <Sel value={row.vendorId}
-        onChange={v => onUpdate({ vendorId: v, modelId: null })}
-        options={VENDOR_OPTIONS.map(o => ({ value: o.value, label: o.label }))} />
+    <div className={cn(
+      "rounded-xl border bg-zinc-900/50 overflow-hidden transition-colors",
+      isManual ? "border-amber-700/30" : "border-zinc-800"
+    )}>
+      {/* Main row */}
+      <div className="grid grid-cols-[1.5fr_1fr_70px_70px_36px] gap-2 items-center p-3">
+        <Sel value={row.vendorId}
+          onChange={v => onUpdate({ vendorId: v, modelId: null })}
+          options={VENDOR_OPTIONS.map(o => ({ value: o.value, label: o.label }))} />
 
-      {/* Resolution */}
-      <Sel value={row.resolution}
-        onChange={v => onUpdate({ resolution: v as CameraConfig["resolution"] })}
-        options={RESOLUTION_OPTIONS.map(o => ({ value: o.value, label: o.label }))} />
+        <Sel value={row.resolution}
+          onChange={v => onUpdate({ resolution: v as CameraConfig["resolution"] })}
+          options={RESOLUTION_OPTIONS.map(o => ({ value: o.value, label: o.label }))} />
 
-      {/* FPS */}
-      <Sel value={String(row.fps)}
-        onChange={v => onUpdate({ fps: parseInt(v) })}
-        options={FPS_OPTIONS.map(f => ({ value: String(f), label: `${f} fps` }))} />
+        <Sel value={String(row.fps)}
+          onChange={v => onUpdate({ fps: parseInt(v) })}
+          options={FPS_OPTIONS.map(f => ({ value: String(f), label: `${f} fps` }))} />
 
-      {/* Qty */}
-      <input type="number" value={row.quantity} min={1} max={1000}
-        onChange={e => onUpdate({ quantity: Math.max(1, parseInt(e.target.value) || 1) })}
-        className="h-9 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-2 text-center font-mono text-sm text-zinc-100 focus:border-cyan-500 focus:outline-none" />
+        <input type="number" value={row.quantity} min={1} max={1000}
+          onChange={e => onUpdate({ quantity: Math.max(1, parseInt(e.target.value) || 1) })}
+          className="h-9 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-2 text-center font-mono text-sm text-zinc-100 focus:border-cyan-500 focus:outline-none" />
 
-      {/* Delete */}
-      {totalRows > 1 ? (
-        <button onClick={onRemove}
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-600 hover:bg-red-950/50 hover:text-red-400 transition-colors">
-          <Trash2 className="h-4 w-4" />
-        </button>
-      ) : <div className="w-9" />}
+        {totalRows > 1 ? (
+          <button onClick={onRemove}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-600 hover:bg-red-950/50 hover:text-red-400 transition-colors">
+            <Trash2 className="h-4 w-4" />
+          </button>
+        ) : <div className="w-9" />}
+      </div>
+
+      {/* Bitrate row */}
+      <div className="flex items-center gap-3 border-t border-zinc-800/60 bg-zinc-900/30 px-3 py-2">
+        {/* Mode toggle */}
+        <div className="flex rounded-md border border-zinc-700 bg-zinc-900 p-0.5 text-[11px] font-medium shrink-0">
+          <button
+            onClick={disableManual}
+            className={cn(
+              "rounded px-2.5 py-1 transition-colors",
+              !isManual ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"
+            )}
+          >
+            Auto
+          </button>
+          <button
+            onClick={enableManual}
+            className={cn(
+              "rounded px-2.5 py-1 transition-colors",
+              isManual ? "bg-amber-600 text-zinc-950 font-semibold" : "text-zinc-500 hover:text-zinc-300"
+            )}
+          >
+            Manual
+          </button>
+        </div>
+
+        {/* Estimated bitrate (always shown) */}
+        {estimatedMbps !== null && (
+          <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+            <span>Calculated:</span>
+            <span className={cn("font-mono font-semibold", isManual ? "text-zinc-500" : "text-cyan-400")}>
+              {estimatedMbps.toFixed(2)} Mbps
+            </span>
+          </div>
+        )}
+
+        {/* Manual input */}
+        {isManual && (
+          <>
+            <div className="flex items-center gap-1.5 text-[11px] text-amber-400 shrink-0">
+              <span className="font-medium">Override:</span>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={manualVal}
+                  min={0.01}
+                  max={500}
+                  step={0.1}
+                  onChange={e => {
+                    const v = parseFloat(e.target.value);
+                    if (!isNaN(v)) onUpdate({ targetBitrateMbps: v });
+                  }}
+                  className={cn(
+                    "h-7 w-20 rounded border pl-2 pr-8 font-mono text-xs focus:outline-none",
+                    isTooHigh || isTooLow
+                      ? "border-red-600/60 bg-red-950/20 text-red-300"
+                      : "border-amber-700/50 bg-amber-950/20 text-amber-300 focus:border-amber-500"
+                  )}
+                />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500 pointer-events-none">
+                  Mbps
+                </span>
+              </div>
+            </div>
+
+            {/* Validation message */}
+            {isTooHigh && (
+              <span className="text-[10px] text-red-400 shrink-0">⚠ Max 50 Mbps for surveillance</span>
+            )}
+            {isTooLow && (
+              <span className="text-[10px] text-red-400 shrink-0">⚠ Must be greater than 0</span>
+            )}
+            {isValid && estimatedMbps !== null && (
+              <span className="text-[10px] text-amber-500 shrink-0">
+                {manualVal > estimatedMbps
+                  ? `+${((manualVal / estimatedMbps - 1) * 100).toFixed(0)}% vs calculated`
+                  : `-${((1 - manualVal / estimatedMbps) * 100).toFixed(0)}% vs calculated`
+                }
+              </span>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
